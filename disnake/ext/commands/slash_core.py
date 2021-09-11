@@ -1,13 +1,11 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Tuple, Union, TYPE_CHECKING, Callable
 
-from .base_core import InvokableApplicationCommand
-from .cog import Cog
+from .base_core import InvokableApplicationCommand, _get_overridden_method
 from .errors import *
 
 from disnake.app_commands import SlashCommand, Option
 from disnake.enums import OptionType
-from disnake._hub import _ApplicationCommandStore
 
 import asyncio
 
@@ -56,6 +54,11 @@ class SubCommandGroup(InvokableApplicationCommand):
         A decorator that creates a subcommand in the
         subcommand group.
         Parameters are the same as in :class:`InvokableSlashCommand.sub_command`
+
+        Returns
+        --------
+        Callable[..., :class:`SubCommand`]
+            A decorator that converts the provided method into a SubCommand, adds it to the bot, then returns it.
         """
 
         def decorator(func) -> SubCommand:
@@ -147,6 +150,11 @@ class InvokableSlashCommand(InvokableApplicationCommand):
             of an option already matches the corresponding function param,
             you don't have to specify the connectors. Connectors template:
             ``{"option-name": "param_name", ...}``
+        
+        Returns
+        --------
+        Callable[..., :class:`SubCommand`]
+            A decorator that converts the provided method into a SubCommand, adds it to the bot, then returns it.
         """
         def decorator(func) -> SubCommand:
             if len(self.children) == 0:
@@ -173,12 +181,16 @@ class InvokableSlashCommand(InvokableApplicationCommand):
     ) -> Callable:
         """
         A decorator that creates a subcommand group under the base command.
-        Remember that the group must have at least one subcommand.
 
         Parameters
         ----------
         name : :class:`str`
             the name of the subcommand group. Defaults to the function name
+        
+        Returns
+        --------
+        Callable[..., :class:`SubCommandGroup`]
+            A decorator that converts the provided method into a SubCommandGroup, adds it to the bot, then returns it.
         """
         def decorator(func) -> SubCommandGroup:
             if len(self.children) == 0:
@@ -195,7 +207,7 @@ class InvokableSlashCommand(InvokableApplicationCommand):
         cog = self.cog
         try:
             if cog is not None:
-                local = Cog._get_overridden_method(cog.cog_slash_command_error)
+                local = _get_overridden_method(cog.cog_slash_command_error)
                 if local is not None:
                     await local(inter, error)
         finally:
@@ -292,6 +304,8 @@ def slash_command(
     def decorator(func) -> InvokableSlashCommand:
         if not asyncio.iscoroutinefunction(func):
             raise TypeError(f'<{func.__qualname__}> must be a coroutine function')
+        if hasattr(func, '__command_flag__'):
+            raise TypeError('Callback is already a command.')
         new_func = InvokableSlashCommand(
             func,
             name=name,
@@ -303,6 +317,5 @@ def slash_command(
             auto_sync=auto_sync,
             **kwargs
         )
-        _ApplicationCommandStore.slash_commands[new_func.name] = new_func
         return new_func
     return decorator

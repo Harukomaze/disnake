@@ -1,12 +1,10 @@
 from __future__ import annotations
 from typing import List, TYPE_CHECKING, Callable
 
-from .base_core import InvokableApplicationCommand
-from .cog import Cog
+from .base_core import InvokableApplicationCommand, _get_overridden_method
 from .errors import *
 
 from disnake.app_commands import UserCommand, MessageCommand
-from disnake._hub import _ApplicationCommandStore
 
 import asyncio
 
@@ -32,7 +30,7 @@ class InvokableUserCommand(InvokableApplicationCommand):
         cog = self.cog
         try:
             if cog is not None:
-                local = Cog._get_overridden_method(cog.cog_user_command_error)
+                local = _get_overridden_method(cog.cog_user_command_error)
                 if local is not None:
                     await local(inter, error)
         finally:
@@ -50,7 +48,7 @@ class InvokableMessageCommand(InvokableApplicationCommand):
         cog = self.cog
         try:
             if cog is not None:
-                local = Cog._get_overridden_method(cog.cog_message_command_error)
+                local = _get_overridden_method(cog.cog_message_command_error)
                 if local is not None:
                     await local(inter, error)
         finally:
@@ -65,7 +63,7 @@ def user_command(
     **kwargs
 ) -> Callable:
     """
-    A decorator that builds a user command.
+    A shortcut decorator that builds a user command.
 
     Parameters
     ----------
@@ -76,11 +74,18 @@ def user_command(
     guild_ids: List[:class:`int`]
         if specified, the client will register the command in these guilds.
         Otherwise this command will be registered globally.
+    
+    Returns
+    --------
+    Callable[..., :class:`InvokableUserCommand`]
+        A decorator that converts the provided method into a InvokableUserCommand, adds it to the bot, then returns it.
     """
 
     def decorator(func) -> InvokableUserCommand:
         if not asyncio.iscoroutinefunction(func):
             raise TypeError(f'<{func.__qualname__}> must be a coroutine function')
+        if hasattr(func, '__command_flag__'):
+            raise TypeError('Callback is already a command.')
         new_func = InvokableUserCommand(
             func,
             name=name,
@@ -88,7 +93,6 @@ def user_command(
             auto_sync=auto_sync,
             **kwargs
         )
-        _ApplicationCommandStore.user_commands[new_func.name] = new_func
         return new_func
     return decorator
 
@@ -112,11 +116,18 @@ def message_command(
     guild_ids: List[:class:`int`]
         if specified, the client will register the command in these guilds.
         Otherwise this command will be registered globally.
+    
+    Returns
+    --------
+    Callable[..., :class:`InvokableMessageCommand`]
+        A decorator that converts the provided method into a InvokableMessageCommand, adds it to the bot, then returns it.
     """
 
     def decorator(func) -> InvokableMessageCommand:
         if not asyncio.iscoroutinefunction(func):
             raise TypeError(f'<{func.__qualname__}> must be a coroutine function')
+        if hasattr(func, '__command_flag__'):
+            raise TypeError('Callback is already a command.')
         new_func = InvokableMessageCommand(
             func,
             name=name,
@@ -124,6 +135,5 @@ def message_command(
             auto_sync=auto_sync,
             **kwargs
         )
-        _ApplicationCommandStore.message_commands[new_func.name] = new_func
         return new_func
     return decorator
